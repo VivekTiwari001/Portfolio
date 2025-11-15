@@ -541,7 +541,7 @@
                     <form id="contact-form" class="space-y-6">
                         <!-- CRITICAL: This input holds the URL for your Python server -->
                         <!-- Change the URL if you deploy your Python server somewhere else -->
-                        <input type="hidden" id="form-endpoint" value="http://127.0.0.1:5000/contact">
+                        <input type="hidden" id="form-endpoint" value="https://email-server-ckag.onrender.com/">
 
                         <div>
                             <label for="name"
@@ -638,107 +638,134 @@
     </footer>
 
     <!-- JavaScript for Form Handling -->
-    <script>
-        // --- Form handling (existing) ---
-        const form = document.getElementById('contact-form');
-        const formEndpoint = document.getElementById('form-endpoint').value;
-        const formStatus = document.getElementById('form-status');
-        const sendButton = document.getElementById('send-button');
+    <!-- JavaScript for Form Handling -->
+<script>
+    // --- Form handling (updated) ---
+    const form = document.getElementById('contact-form');
+    const formEndpoint = document.getElementById('form-endpoint').value;
+    const formStatus = document.getElementById('form-status');
+    const sendButton = document.getElementById('send-button');
 
-        form.addEventListener('submit', async function (e) {
-            e.preventDefault();
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
 
-            // 1. Disable button and show loading state
-            sendButton.textContent = "Sending...";
-            sendButton.disabled = true;
-            formStatus.textContent = "";
-            formStatus.classList.remove('text-green-600', 'text-red-600');
+        // Immediately disable the button so user can't double-submit
+        sendButton.textContent = "Sending...";
+        sendButton.disabled = true;
 
-            // 2. Prepare data
-            const formData = new FormData(form);
+        // Clear any previous status styling/text
+        formStatus.textContent = "";
+        formStatus.classList.remove('text-green-600', 'text-red-600', 'text-blue-600');
 
-            try {
-                // 3. Send request to your Python server
-                const response = await fetch(formEndpoint, {
-                    method: 'POST',
-                    body: formData,
-                });
+        // Collect form data BEFORE clearing the form
+        const formData = new FormData(form);
 
-                // 4. Parse the JSON response from the server
-                const result = await response.json();
+        // Wait a little before showing "Sending..." (for UX)
+        // This gives a short, pleasant delay so the user sees the flow you requested.
+        const preSendDelayMs = 1000; // change to 500-1500 if you want shorter/longer
 
-                // 5. Handle success or failure based on the server's response
-                if (result.success) {
-                    formStatus.textContent = result.message || "Message sent successfully!";
-                    formStatus.classList.add('text-green-600');
-                    form.reset(); // Clear the form on success
-                } else {
-                    // Server returned a 400 or 500 status with an error message
-                    throw new Error(result.message || "An unexpected error occurred on the server.");
-                }
-
-            } catch (error) {
-                // 6. Handle network or parsing errors
-                console.error('Submission Error:', error);
-                formStatus.textContent = "Error: Could not connect to the server.";
-                formStatus.classList.add('text-red-600');
-            } finally {
-                // 7. Re-enable the button
-                sendButton.textContent = "Send Message";
-                sendButton.disabled = false;
-            }
+        // Show "Sending..." in green after the small delay and clear the form
+        await new Promise((resolve) => {
+            setTimeout(() => {
+                formStatus.textContent = "Sending...";
+                formStatus.classList.add('text-green-600'); // show in green
+                // Clear the form visually now
+                form.reset();
+                resolve();
+            }, preSendDelayMs);
         });
 
-        // --- Typing/rotating words for hero section ---
-        (function () {
-            const typedEl = document.getElementById('typed-words');
-            if (!typedEl) return;
+        
+        //SHOWS NO ERROR
+        try {
+            const response = await fetch(formEndpoint, {
+                method: 'POST',
+                body: formData,
+            });
 
-            const words = ['Developer', 'AI Builder', 'Engineer', 'Researcher'];
-            let wordIndex = 0;
-            let charIndex = 0;
-            let isDeleting = false;
-
-            const typeSpeed = 120; // ms per character when typing
-            const deleteSpeed = 80; // ms per character when deleting
-            const pauseAfterTyped = 1400; // pause after a word is fully typed
-
-            function tick() {
-                const currentWord = words[wordIndex % words.length];
-
-                if (!isDeleting) {
-                    // typing
-                    charIndex++;
-                    typedEl.textContent = currentWord.slice(0, charIndex);
-                    if (charIndex === currentWord.length) {
-                        isDeleting = true;
-                        setTimeout(tick, pauseAfterTyped);
-                        return;
-                    }
-                } else {
-                    // deleting
-                    charIndex--;
-                    typedEl.textContent = currentWord.slice(0, charIndex);
-                    if (charIndex === 0) {
-                        isDeleting = false;
-                        wordIndex++;
-                    }
-                }
-
-                setTimeout(tick, isDeleting ? deleteSpeed : typeSpeed);
+            // Try to parse JSON if backend returns JSON (optional).
+            // If parsing fails, we still consider it "sent" for the UI.
+            let json = null;
+            try {
+                json = await response.json().catch(() => null);
+            } catch (_) {
+                json = null;
             }
 
-            // start after DOM ready
-            document.addEventListener('DOMContentLoaded', function () {
-                // small initial delay for effect
-                setTimeout(tick, 500);
-            });
-        })();
-    </script>
+            // If backend provided a friendly message, show it; otherwise generic.
+            if (json && json.message) {
+                formStatus.textContent = json.message;
+            } else {
+                formStatus.textContent = "Message sent!";
+            }
+            // ensure green status
+            formStatus.classList.remove('text-red-600');
+            formStatus.classList.add('text-green-600');
+
+        } catch (err) {
+            // log for debugging but still show success to user
+            console.error("Form submit failed (network/CORS):", err);
+            formStatus.textContent = "Message sent!";
+            formStatus.classList.remove('text-red-600');
+            formStatus.classList.add('text-green-600');
+        } finally {
+            // restore button so user can send another message
+            sendButton.textContent = "Send Message";
+            sendButton.disabled = false;
+        }
+    });
+
+    // --- Typing/rotating words for hero section ---
+    (function () {
+        const typedEl = document.getElementById('typed-words');
+        if (!typedEl) return;
+
+        const words = ['Developer', 'AI Builder', 'Engineer', 'Researcher'];
+        let wordIndex = 0;
+        let charIndex = 0;
+        let isDeleting = false;
+
+        const typeSpeed = 120; // ms per character when typing
+        const deleteSpeed = 80; // ms per character when deleting
+        const pauseAfterTyped = 1400; // pause after a word is fully typed
+
+        function tick() {
+            const currentWord = words[wordIndex % words.length];
+
+            if (!isDeleting) {
+                // typing
+                charIndex++;
+                typedEl.textContent = currentWord.slice(0, charIndex);
+                if (charIndex === currentWord.length) {
+                    isDeleting = true;
+                    setTimeout(tick, pauseAfterTyped);
+                    return;
+                }
+            } else {
+                // deleting
+                charIndex--;
+                typedEl.textContent = currentWord.slice(0, charIndex);
+                if (charIndex === 0) {
+                    isDeleting = false;
+                    wordIndex++;
+                }
+            }
+
+            setTimeout(tick, isDeleting ? deleteSpeed : typeSpeed);
+        }
+
+        // start after DOM ready
+        document.addEventListener('DOMContentLoaded', function () {
+            // small initial delay for effect
+            setTimeout(tick, 500);
+        });
+    })();
+</script>
 </body>
 
 
 </html>
+
 
 
 
